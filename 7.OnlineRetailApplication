@@ -1,0 +1,189 @@
+USE OnlineRetailApplication;
+
+/* ==========================================================
+   TASK 7: CREATING VIEWS (15 VIEWS TOTAL)
+   Using all tables in the project
+   ========================================================== */
+
+/* 1. Basic customer info */
+CREATE VIEW customer_basic_info AS
+SELECT customer_id, first_name, last_name, email
+FROM customers;
+
+/* usage */
+SELECT * FROM customer_basic_info;
+
+
+/* 2. Product list with category */
+CREATE VIEW product_with_category AS
+SELECT p.product_id, p.product_name, c.category_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.category_id;
+
+/* usage */
+SELECT * FROM product_with_category;
+
+
+/* 3. Basic order summary */
+CREATE VIEW order_basic_summary AS
+SELECT o.order_id, o.order_date, c.first_name, c.last_name
+FROM orders o
+INNER JOIN customers c ON o.customer_id = c.customer_id;
+
+/* usage */
+SELECT * FROM order_basic_summary;
+
+
+/* 4. Customer emails only */
+CREATE VIEW customer_contact_directory AS
+SELECT first_name, last_name, email
+FROM customers;
+
+/* usage */
+SELECT * FROM customer_contact_directory;
+
+
+/* 5. Products with price only */
+CREATE VIEW product_price_list AS
+SELECT product_id, product_name, price
+FROM products;
+
+/* usage */
+SELECT * FROM product_price_list ORDER BY price DESC;
+
+
+/* 6. Count of orders per customer */
+CREATE VIEW customer_order_counts AS
+SELECT c.customer_id, c.first_name, c.last_name,
+       COUNT(o.order_id) AS total_orders
+FROM customers c
+LEFT JOIN orders o ON c.customer_id = o.customer_id
+GROUP BY c.customer_id;
+
+/* usage */
+SELECT * FROM customer_order_counts ORDER BY total_orders DESC;
+
+
+/* 7. Revenue per product */
+CREATE VIEW product_sales_summary AS
+SELECT p.product_id, p.product_name,
+       SUM(oi.quantity * oi.unit_price) AS total_revenue
+FROM products p
+LEFT JOIN order_items oi ON p.product_id = oi.product_id
+GROUP BY p.product_id;
+
+/* usage */
+SELECT * FROM product_sales_summary ORDER BY total_revenue DESC;
+
+
+/* 8. Order payment status */
+CREATE VIEW order_payment_status AS
+SELECT o.order_id,
+       SUM(oi.quantity * oi.unit_price) AS order_total,
+       SUM(pa.amount) AS amount_paid,
+       CASE WHEN SUM(pa.amount) >= SUM(oi.quantity * oi.unit_price)
+            THEN 'Paid' ELSE 'Pending' END AS status
+FROM orders o
+LEFT JOIN order_items oi ON o.order_id = oi.order_id
+LEFT JOIN payments pa ON o.order_id = pa.order_id
+GROUP BY o.order_id;
+
+/* usage */
+SELECT * FROM order_payment_status WHERE status='Pending';
+
+
+/* 9. Average product rating */
+CREATE VIEW product_rating_summary AS
+SELECT p.product_id, p.product_name,
+       AVG(r.rating) AS avg_rating,
+       COUNT(r.review_id) AS review_count
+FROM products p
+LEFT JOIN reviews r ON p.product_id = r.product_id
+GROUP BY p.product_id;
+
+/* usage */
+SELECT * FROM product_rating_summary ORDER BY avg_rating DESC;
+
+
+/* 10. Category product counts */
+CREATE VIEW category_product_counts AS
+SELECT c.category_id, c.category_name,
+       COUNT(p.product_id) AS total_products
+FROM categories c
+LEFT JOIN products p ON c.category_id = p.category_id
+GROUP BY c.category_id;
+
+/* usage */
+SELECT * FROM category_product_counts ORDER BY total_products DESC;
+
+
+/* 11. Top products per category (ranked) */
+CREATE VIEW top_products_per_category AS
+SELECT c.category_name, p.product_name,
+       SUM(oi.quantity * oi.unit_price) AS revenue,
+       DENSE_RANK() OVER(
+           PARTITION BY c.category_name
+           ORDER BY SUM(oi.quantity * oi.unit_price) DESC
+       ) AS rank_in_category
+FROM products p
+INNER JOIN categories c ON p.category_id = c.category_id
+INNER JOIN order_items oi ON p.product_id = oi.product_id
+GROUP BY c.category_name, p.product_name;
+
+/* usage */
+SELECT * FROM top_products_per_category WHERE rank_in_category = 1;
+
+
+/* 12. Customer spending segments */
+CREATE VIEW customer_value_segments AS
+SELECT c.customer_id, c.first_name, c.last_name,
+       SUM(oi.quantity * oi.unit_price) AS total_spent,
+       CASE
+           WHEN SUM(oi.quantity * oi.unit_price) >= 5000 THEN 'Premium'
+           WHEN SUM(oi.quantity * oi.unit_price) BETWEEN 1000 AND 4999 THEN 'Standard'
+           ELSE 'Basic'
+       END AS customer_segment
+FROM customers c
+LEFT JOIN orders o ON c.customer_id = o.customer_id
+LEFT JOIN order_items oi ON o.order_id = oi.order_id
+GROUP BY c.customer_id;
+
+/* usage */
+SELECT * FROM customer_value_segments ORDER BY total_spent DESC;
+
+
+/* 13. Most reviewed products */
+CREATE VIEW most_reviewed_products AS
+SELECT p.product_id, p.product_name,
+       COUNT(r.review_id) AS review_count
+FROM products p
+LEFT JOIN reviews r ON p.product_id = r.product_id
+GROUP BY p.product_id
+ORDER BY review_count DESC;
+
+/* usage */
+SELECT * FROM most_reviewed_products LIMIT 5;
+
+
+/* 14. High-value unpaid orders */
+CREATE VIEW unpaid_high_value_orders AS
+SELECT ops.order_id, ops.order_total, ops.amount_paid, ops.status
+FROM order_payment_status ops
+WHERE ops.status = 'Pending' AND ops.order_total > 1000;
+
+/* usage */
+SELECT * FROM unpaid_high_value_orders;
+
+
+/* 15. Category revenue performance */
+CREATE VIEW category_revenue_ranking AS
+SELECT c.category_name,
+       SUM(oi.quantity * oi.unit_price) AS category_revenue,
+       RANK() OVER (ORDER BY SUM(oi.quantity * oi.unit_price) DESC) AS revenue_rank
+FROM categories c
+LEFT JOIN products p ON c.category_id = p.category_id
+LEFT JOIN order_items oi ON p.product_id = oi.product_id
+GROUP BY c.category_name;
+
+/* usage */
+SELECT * FROM category_revenue_ranking ORDER BY revenue_rank;
